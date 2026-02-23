@@ -80,6 +80,8 @@ The central idea is that **curvature reveals local geometric structure** in grap
   * **Homophilic Path:** Standard GCNConv layers for smooth feature propagation.
   * **Heterophilic Path:** Custom HeteroConv layers for contrasting information aggregation.
     
+
+```mermaid
 flowchart TD
     A[Input Features] --> B[Compute Forman Curvature<br/>edge]
     B --> C[Homophilic Path<br/>GCNConv]
