@@ -161,19 +161,3 @@ curvature_gnn/
 └── requirements.txt         
 ```
 
----
-
-## Reproducibility
-
-1. **Install dependencies:**
-
-   ```bash
-   pip install torch torch_geometric numpy matplotlib
-   ```
-2. **Run an experiment:**
-
-   ```bash
-   python experiment_1.py
-   python experiment_2.py
-   python experiment_3.py
-   ```
