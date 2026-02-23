@@ -73,6 +73,19 @@ The central idea is that **curvature reveals local geometric structure** in grap
 **File:** `experiment_3.ipynb`
 **Goal:** Develop a dual-path GCN that dynamically routes information through **homophilic** or **heterophilic** channels based on local curvature.
 
+#### The Mathematical framework
+
+The Curvature-Gated GCN is defined as:
+
+$$
+H^{(l+1)} = \sigma\left(\tilde{D}^{-\frac{1}{2}}\left[(G \odot A)H^{(l)}W^{(l)}_{\text{homo}} + ((1-G) \odot A)H^{(l)}W^{(l)}_{\text{hetero}}\right]\tilde{D}^{-\frac{1}{2}}\right)
+$$
+
+**where:**
+- $G = \sigma(\mathcal{F}/k)$ is the curvature gate
+- $\mathcal{F}$ is the Forman-Ricci curvature tensor over edges
+- $A$ is the adjacency matrix
+- $D$ is the degree matrix
 #### Model Architecture
 
 * Two parallel convolutional paths:
