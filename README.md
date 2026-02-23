@@ -79,24 +79,14 @@ The central idea is that **curvature reveals local geometric structure** in grap
 
   * **Homophilic Path:** Standard GCNConv layers for smooth feature propagation.
   * **Heterophilic Path:** Custom HeteroConv layers for contrasting information aggregation.
-                       ┌──────────────────────────────────┐
-                       │          Input Features          │
-                       └──────────────────────────────────┘
-                                        │
-                                        ▼
-                       ┌──────────────────────────────────┐
-                       │ Compute Forman Curvature (edge)  │
-                       └──────────────────────────────────┘
-                                         │
-                          ┌──────────────┴───────────────┐
-                          ▼                              ▼
-                   Homophilic Path                Heterophilic Path
-                      (GCNConv)                     (HeteroConv)
-                          │                              │
-                          └──────► Gated Combination ◄───┘
-                                         │
-                                         ▼
-                               Node Class Predictions
+    
+flowchart TD
+    A[Input Features] --> B[Compute Forman Curvature<br/>edge]
+    B --> C[Homophilic Path<br/>GCNConv]
+    B --> D[Heterophilic Path<br/>HeteroConv]
+    C --> E[Gated Combination]
+    D --> E
+    E --> F[Node Class Predictions]
     
 * The two outputs are combined adaptively per edge.
 
