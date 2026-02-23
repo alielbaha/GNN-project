@@ -89,7 +89,8 @@ flowchart TD
     C --> E[Gated Combination]
     D --> E
     E --> F[Node Class Predictions]
-    
+```
+
 * The two outputs are combined adaptively per edge.
 
 #### Setup
