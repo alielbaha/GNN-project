@@ -75,6 +75,20 @@ The central idea is that **curvature reveals local geometric structure** in grap
 
 #### The Mathematical framework
 
+We assign a curvature-based gating value $g_{uv}$ to each edge $(u, v)$:
+
+$$
+g_{uv} = \sigma \left( \frac{\mathcal{F}(u, v)}{k} \right)
+$$
+
+where $k$ is a scaling constant (we use $k = 5$).
+
+This value lies in $(0, 1)$ and determines how much the model trusts homophilic vs heterophilic information.
+
+- $g_{uv} \approx 1 \rightarrow$ Edge is strongly homophilic $\rightarrow$ propagate via GCNConv path
+- $g_{uv} \approx 0 \rightarrow$ Edge is heterophilic $\rightarrow$ propagate via HeteroConv path
+
+
 The Curvature-Gated GCN is defined as:
 
 $$
