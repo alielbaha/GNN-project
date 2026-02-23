@@ -68,7 +68,7 @@ The central idea is that **curvature reveals local geometric structure** in grap
 
 ---
 
-### **Experiment 3: Curvature-Gated GCN (CG-GCN)**
+### **Experiment 3: Curvature-Gated GCN (our contribution)**
 
 **File:** `experiment_3.ipynb`
 **Goal:** Develop a dual-path GCN that dynamically routes information through **homophilic** or **heterophilic** channels based on local curvature.
