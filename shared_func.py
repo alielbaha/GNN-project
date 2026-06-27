@@ -1,95 +1,90 @@
 import torch
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv, MessagePassing
-from torch_geometric.utils import to_networkx
+from torch_geometric.nn.conv.gcn_conv import gcn_norm
+from torch_geometric.utils import to_networkx, add_self_loops
 import networkx as nx
 
-def forman_curvature(G):
+
+
+device = torch.device('cusda' if torch.cuda.is_available() else 'cpu')
+
+def forman_curvature(G): 
     fc = {}
     for u, v in G.edges():
-        key = tuple(sorted((u, v)))
         triangles = len(list(nx.common_neighbors(G, u, v)))
-        degree_sum = G.degree[u] + G.degree[v]
-        curvature = max(0.1, 4 - degree_sum + 3 * triangles)
-        fc[key] = curvature
+        fc[(u, v)] = 4 - (G.degree[u] + G.degree[v]) + 3 * triangles
     return fc
 
-def get_edge_curvature_tensor(data, device):
+def add_forman_edge_weights(data, normalize=True): 
+
     G = to_networkx(data, to_undirected=True)
-    forman = forman_curvature(G)
-
-    curv_vals = []
+    fc = forman_curvature(G)
+    
     edge_index = data.edge_index.cpu()
-    for i in range(edge_index.shape[1]):
-        u, v = edge_index[0, i].item(), edge_index[1, i].item()
-        key = tuple(sorted((u, v)))
-        curv_vals.append(forman.get(key, 0.0))
+    num_edges = edge_index.shape[1]
+    weights = []
+    
+    for i in range(num_edges):
+        src, dst = edge_index[0, i].item(), edge_index[1, i].item()
+        key = tuple(sorted((src, dst)))
+        weights.append(fc.get(key, 0.0))
+        
+    weights = torch.tensor(weights, dtype=torch.float)
+    
+    if normalize:
+        w_min, w_max = weights.min(), weights.max()
+        if w_max > w_min:
+            weights = (weights - w_min) / (w_max - w_min)
+            weights = 0.1 + 0.9 * weights  
+        else:
+            weights = torch.full_like(weights, 0.5)
+            
+    data.edge_weight = weights
+    return data
 
-    return torch.tensor(curv_vals, dtype=torch.float, device=device)
+def get_random_split(data, train_ratio=0.6, val_ratio=0.2, seed=42):
+    torch.manual_seed(seed)
+    n = data.num_nodes
+    idx = torch.randperm(n)
+    train_size = int(train_ratio * n)
+    val_size = int(val_ratio * n)
+    
+    data.train_mask = torch.zeros(n, dtype=torch.bool)
+    data.val_mask = torch.zeros(n, dtype=torch.bool)
+    data.test_mask = torch.zeros(n, dtype=torch.bool)
+    
+    data.train_mask[idx[:train_size]] = True
+    data.val_mask[idx[train_size:train_size + val_size]] = True
+    data.test_mask[idx[train_size + val_size:]] = True
+    return data
 
 class HeteroConv(MessagePassing):
-    def __init__(self, in_channels, out_channels):
-        super().__init__(aggr='add')
-        self.lin = torch.nn.Linear(in_channels, out_channels)
+    def __init__(self, in_channels, out_channels, add_self_loops=True, normalize=True, **kwargs):
+        kwargs.setdefault('aggr', 'add')
+        super().__init__(**kwargs)
+        
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.add_self_loops = add_self_loops
+        self.normalize = normalize
+        
+        self.lin = torch.nn.Linear(in_channels, out_channels, bias=True)
+        
 
     def forward(self, x, edge_index, edge_weight=None):
+        if self.add_self_loops:
+            edge_index, edge_weight = add_self_loops(
+                edge_index, edge_weight, fill_value=1.0, num_nodes=x.size(0)
+            )
+            
+        if self.normalize:
+            edge_index, edge_weight = gcn_norm(
+                edge_index, edge_weight, x.size(0), add_self_loops=False
+            )
+            
+        x = self.lin(x)
         return self.propagate(edge_index, x=x, edge_weight=edge_weight)
 
-    def message(self, x_i, x_j, edge_weight):
-        diff = torch.abs(x_i - x_j)
-        if edge_weight is not None:
-            return edge_weight.view(-1, 1) * self.lin(diff)
-        return self.lin(diff)
-
-class CurvatureGatedGCN(torch.nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim):
-        super().__init__()
-        self.homo_convs = torch.nn.ModuleList([
-            GCNConv(in_dim, hidden_dim),
-            GCNConv(hidden_dim, out_dim)
-        ])
-        self.hetero_convs = torch.nn.ModuleList([
-            HeteroConv(in_dim, hidden_dim),
-            HeteroConv(hidden_dim, out_dim)
-        ])
-
-    def forward(self, x, edge_index, edge_curvature):
-        gate = torch.sigmoid(edge_curvature / 5.0).view(-1, 1)
-        gate_homo = gate.squeeze()
-        gate_hetero = (1 - gate).squeeze()
-
-        for i in range(len(self.homo_convs)):
-            is_last_layer = (i == len(self.homo_convs) - 1)
-
-            x_homo = self.homo_convs[i](x, edge_index, edge_weight=gate_homo)
-            
-            x_hetero = self.hetero_convs[i](x, edge_index, edge_weight=gate_hetero)
-            
-            x = x_homo + x_hetero
-            
-            if not is_last_layer:
-                x = F.relu(x)
-                x = F.dropout(x, p=0.5, training=self.training)
-                
-        return x
-    
-
-def train_model(model, data, edge_curv, epochs=200, lr=0.01):
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
-    criterion = torch.nn.CrossEntropyLoss()
-
-    for epoch in range(1, epochs + 1):
-        model.train()
-        optimizer.zero_grad()
-        out = model(data.x, data.edge_index, edge_curv)
-        loss = criterion(out[data.train_mask], data.y[data.train_mask])
-        loss.backward()
-        optimizer.step()
-
-    model.eval()
-    with torch.no_grad():
-        out = model(data.x, data.edge_index, edge_curv)
-        pred = out.argmax(dim=1)
-        acc = (pred[data.test_mask] == data.y[data.test_mask]).sum().item() / data.test_mask.sum().item()
-    return acc
-
+    def message(self, x_j, edge_weight):
+        return edge_weight.view(-1, 1) * x_j
